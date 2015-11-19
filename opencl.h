@@ -397,6 +397,9 @@ void mem_fence(cl_mem_fence_flags flags);
 void read_mem_fence(cl_mem_fence_flags flags);
 void write_mem_fence(cl_mem_fence_flags flags);
 
+/* special qualifiers */
+#define __OVERLOADABLE__
+
 /* TODO: add next functions */
 
 #endif // OPENCL_H
