@@ -78,7 +78,7 @@ private:
 		
 		std::string string;
 		std::smatch match;
-		std::regex include("#include[ ]*[\"<]([^ ]*)[\">]"), pragma("#pragma[ ]*([^ \t\n]*)");
+		std::regex include("^[ \t]*#include[ ]*[\"<]([^ ]*)[\">]"), pragma("^[  \t]*#pragma[ ]*([^ \t\n]*)");
 		while(getline(&line, &n, reader.file) > 0) {
 			string = std::string(line);
 			if(std::regex_search(string, match, include)) {
@@ -117,10 +117,33 @@ private:
 		stack.pop_back();
 	}
 	
+	std::pair<std::string, int> get_location(int pos) const {
+		const file_info *info_ptr;
+		int rpos = pos + 1;
+		for(const file_info &info : files) {
+			// printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
+			if(info.begin < pos && info.end >= pos) {
+				int trpos = pos - info.begin;
+				if(rpos > trpos) {
+					info_ptr = &info;
+					rpos = trpos;
+				}
+			}
+		}
+		for(const file_info &info : files) {
+			if(info.begin >= info_ptr->begin && info.end < pos) {
+				//printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
+				rpos -= info.size;
+			}
+		}
+		return std::pair<std::string, int>(info_ptr->name, rpos);
+	}
+	
 public:
 	cl_includer(const std::string &filename, const std::string &include_dir = "") {
 		incdir = include_dir;
 		load_file(filename);
+		//printf("%s", source.data());
 	}
 	~cl_includer() = default;
 	
@@ -131,33 +154,29 @@ public:
 	std::string restore_location(const std::string &msg) const {
 		std::string result;
 		std::string string(msg);
-		std::regex expr(":([0123456789]*):([0123456789]*):");
+		std::regex expr(":([0123456789]*):([0123456789]*):");//, line_expr("line ([0123456789]*);");
 		std::smatch match;
+		
 		while(std::regex_search(string,match,expr))
 		{
-			const file_info *info_ptr;
-			int pos = std::stoi(std::string(match[1]));
-			int rpos = pos + 1;
-			for(const file_info &info : files) {
-				// printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
-				if(info.begin < pos && info.end >= pos) {
-					int trpos = pos - info.begin;
-					if(rpos > trpos) {
-						info_ptr = &info;
-						rpos = trpos;
-					}
-				}
-			}
-			for(const file_info &info : files) {
-				if(info.begin >= info_ptr->begin && info.end < pos) {
-					//printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
-					rpos -= info.size;
-				}
-			}
-			result += match.prefix().str() + info_ptr->name + ":" + std::to_string(rpos) + ":" + std::string(match[2]) + ":";
+			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[1])));
+			result += match.prefix().str() + pair.first + ":" + std::to_string(pair.second) + ":" + std::string(match[2]) + ":";
 			string = match.suffix().str();
 		}
 		result += string;
+		
+		/*
+		string = result;
+		result = "";
+		while(std::regex_search(string,match,line_expr))
+		{
+			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[1])));
+			result += match.prefix().str() + pair.first + ", line " + std::to_string(pair.second) + ";";
+			string = match.suffix().str();
+		}
+		result += string;
+		*/
+		
 		return result;
 	}
 };
