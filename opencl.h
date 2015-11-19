@@ -1,7 +1,7 @@
-/* this header allows C parsers use OpenCL 1.1 sources properly */
-
-/* custom pragma tells includer to omit the file */
 #pragma omit
+/* this custom pragma tells includer to omit the file */
+
+/* this header allows C parsers use OpenCL 1.1 sources properly */
 
 #ifndef OPENCL_H
 #define OPENCL_H

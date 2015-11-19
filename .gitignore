@@ -1,0 +1,4 @@
+*
+!.gitignore
+!opencl.h
+!includer.hpp
