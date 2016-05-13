@@ -8,7 +8,7 @@
 #include <exception>
 #include <regex>
 
-class cl_includer {
+class includer {
 public:
 	class exception : public std::exception {
 	private:
@@ -65,7 +65,11 @@ private:
 			}
 		}
 		
-		FileReader reader(incdir + "/" + filename);
+		std::string path = filename;
+		if(incdir.size() > 0) {
+			path = incdir + "/" + path;
+		}
+		FileReader reader(path);
 		
 		file_info info;
 		file_info *info_ptr;
@@ -140,12 +144,12 @@ private:
 	}
 	
 public:
-	cl_includer(const std::string &filename, const std::string &include_dir = "") {
+	includer(const std::string &filename, const std::string &include_dir = "") {
 		incdir = include_dir;
 		load_file(filename);
 		//printf("%s", source.data());
 	}
-	~cl_includer() = default;
+	~includer() = default;
 	
 	std::string get_source() const {
 		return source;
@@ -154,28 +158,17 @@ public:
 	std::string restore_location(const std::string &msg) const {
 		std::string result;
 		std::string string(msg);
-		std::regex expr(":([0123456789]*):([0123456789]*):");//, line_expr("line ([0123456789]*);");
+		// some of GLSL output formats
+		std::regex expr("^[a-zA-Z:\\(\\) ]*(\\d+)[:\\(\\) ]+(\\d+)[:\\) ]*"); 
 		std::smatch match;
 		
 		while(std::regex_search(string,match,expr))
 		{
-			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[1])));
-			result += match.prefix().str() + pair.first + ":" + std::to_string(pair.second) + ":" + std::string(match[2]) + ":";
+			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[2])));
+			result += match.prefix().str() + pair.first + ": " + std::string(match[1]) + ":" + std::to_string(pair.second);
 			string = match.suffix().str();
 		}
 		result += string;
-		
-		/*
-		string = result;
-		result = "";
-		while(std::regex_search(string,match,line_expr))
-		{
-			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[1])));
-			result += match.prefix().str() + pair.first + ", line " + std::to_string(pair.second) + ";";
-			string = match.suffix().str();
-		}
-		result += string;
-		*/
 		
 		return result;
 	}
