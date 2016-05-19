@@ -159,13 +159,13 @@ public:
 		std::string result;
 		std::string string(msg);
 		// some of GLSL output formats
-		std::regex expr("^[a-zA-Z:\\(\\) ]*(\\d+)[:\\(\\) ]+(\\d+)[:\\)]*"); 
+		std::regex expr("(^|\n)[a-zA-Z:\\(\\) ]*(\\d+)[:\\(\\) ]+(\\d+)[:\\)]*"); 
 		std::smatch match;
 		
 		while(std::regex_search(string,match,expr))
 		{
-			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[2])));
-			result += match.prefix().str() + pair.first + ": " + std::string(match[1]) + ":" + std::to_string(pair.second);
+			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[3])));
+			result += match.prefix().str() + std::string(match[1]) + pair.first + ": " + std::string(match[2]) + ":" + std::to_string(pair.second);
 			string = match.suffix().str();
 		}
 		result += string;
