@@ -154,7 +154,7 @@ public:
 	std::string restore_location(const std::string &msg) const {
 		std::string result;
 		std::string string(msg);
-		std::regex expr(":([0123456789]*):([0123456789]*):");//, line_expr("line ([0123456789]*);");
+		std::regex expr("<kernel>:(\\d*):(\\d*):");//, line_expr("line ([0123456789]*);");
 		std::smatch match;
 		
 		while(std::regex_search(string,match,expr))
