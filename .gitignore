@@ -1,0 +1,5 @@
+*.exe
+*.config
+*.files
+*.includes
+*.creator*

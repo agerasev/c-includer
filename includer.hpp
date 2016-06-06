@@ -1,175 +1,139 @@
 #pragma once
 
 #include <cstdio>
-#include <cstring>
 
 #include <list>
 #include <string>
+#include <fstream>
 #include <exception>
 #include <regex>
 
 class includer {
 public:
 	class exception : public std::exception {
-	private:
-		std::string msg;
 	public:
-		exception(const std::string &str) : msg(str) {}
-		virtual ~exception() noexcept {}
-		virtual const char *what() const noexcept override {
-			return msg.data();
+		std::string _msg;
+		exception(const std::string &msg) : _msg(msg) {}
+		const char *what() const noexcept {
+			return _msg.c_str();
 		}
 	};
-	
+
 private:
-	class FileReader {
+	class _branch {
 	public:
-		FILE *file = nullptr;
-		FileReader(const std::string &filename) {
-			file = fopen(filename.data() ,"r");
-			if(!file) {
-				throw exception("cannot open file '" + filename + "'");
-			}
-		}
-		~FileReader() {
-			fclose(file);
-		}
-	};
-	
-	struct file_info {
-		std::string name;
-		int begin, end = 0;
+		int pos;
 		int size = 0;
+		int lsize = 0;
+		std::string name;
+		std::string fullname;
+		
+		std::list<_branch*> inner;
+		
+		_branch(int p) : pos(p) {
+			
+		}
+		~_branch() {
+			for(_branch *b : inner) {
+				delete b;
+			}
+		}
+		_branch *add(int p) {
+			_branch *b = new _branch(p);
+			inner.push_back(b);
+			return b;
+		}
 	};
 	
-	std::list<file_info> files;
-	std::list<file_info*> stack;
-	int counter = 0;
+	std::string _name;
+	std::list<std::string> _dirs;
+	std::string _data;
 	
-	std::string incdir;
-	std::string source;
+	std::list<std::string> _ignore;
+	_branch _trunk;
 	
-	void add_line(const char *line) {
-		source += line;
-		stack.back()->size++;
-		++counter;
-	}
-	
-	void load_file(const std::string &filename) {
-		char *line = nullptr;
-		size_t n = 0;
-		
-		for(const file_info *info : stack) {
-			if(info->name == filename) {
-				throw exception("include recursion in file '" + filename + "'");
+	void _read(const std::string name, _branch *branch, int depth = 0) throw(std::exception) {
+		if(depth > 16) {
+			throw exception("include depth > 16, possibly recursion occured");
+		}
+		branch->name = name;
+		for(const std::string &n : _ignore) {
+			if(n == name) {
+				return;
 			}
 		}
 		
-		std::string path = filename;
-		if(incdir.size() > 0) {
-			path = incdir + "/" + path;
+		std::ifstream file;
+		
+		// try open file in each dir
+		std::string fullname;
+		for(const std::string &dir : _dirs) {
+			fullname = dir + "/" + name;
+			file.open(fullname);
+			if(file) {
+				break;
+			}
 		}
-		FileReader reader(path);
+		if(!file) {
+			throw exception("cannot open file '" + name + "'");
+		}
+		branch->fullname = fullname;
 		
-		file_info info;
-		file_info *info_ptr;
-		info.name = filename;
-		info.begin = counter;
-		files.push_back(info);
-		info_ptr = &files.back();
-		
-		stack.push_back(info_ptr);
-		
-		std::string string;
+		// read file line by line
+		std::string line;
 		std::smatch match;
 		std::regex include("^[ \t]*#include[ ]*[\"<]([^ ]*)[\">]"), pragma("^[  \t]*#pragma[ ]*([^ \t\n]*)");
-		while(getline(&line, &n, reader.file) > 0) {
-			string = std::string(line);
-			if(std::regex_search(string, match, include)) {
-				add_line("\n");
-				load_file(std::string(match[1]).data());
-				continue;
-			}
-			if(std::regex_search(string, match, pragma)) {
+		while(std::getline(file, line)) {
+			if(std::regex_search(line, match, include)) {
+				_branch *b = branch->add(branch->pos + branch->size);
+				_read(std::string(match[1]), b, depth + 1);
+				branch->size += b->size;
+			} else if(std::regex_search(line, match, pragma)) {
 				std::string keyword(match[1]);
 				if(keyword == "omit") {
-					add_line("\n");
 					break;
+				} else if(keyword == "once") {
+					_ignore.push_back(name);
 				}
-				if(keyword == "once") {
-					int found = 0;
-					for(const file_info &prev_info : files) {
-						if(prev_info.name == filename && prev_info.end != 0) {
-							found = 1;
-							break;
-						}
-					}
-					add_line("\n");
-					if(found) {
-						break;
-					}
-					continue;
-				}
+			} else {
+				_data += line;
 			}
-			add_line(line);
+			_data += "\n";
+			branch->size += 1;
+			branch->lsize += 1;
 		}
-		if(line != nullptr)
-			free(line);
-		
-		info_ptr->end = counter;
-		
-		stack.pop_back();
 	}
 	
-	std::pair<std::string, int> get_location(int pos) const {
-		const file_info *info_ptr;
-		int rpos = pos + 1;
-		for(const file_info &info : files) {
-			// printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
-			if(info.begin < pos && info.end >= pos) {
-				int trpos = pos - info.begin;
-				if(rpos > trpos) {
-					info_ptr = &info;
-					rpos = trpos;
-				}
-			}
+	bool _locate(int gp, const _branch *br, std::string &fn, int &lp) const {
+		if(gp < br->pos || gp >= br->pos + br->size) {
+			return false;
 		}
-		for(const file_info &info : files) {
-			if(info.begin >= info_ptr->begin && info.end < pos) {
-				//printf("%s %d : %d\n", info.name.data(), info.begin, info.end);
-				rpos -= info.size;
+		int shift = gp - br->pos;
+		for(const _branch *b : br->inner) {
+			if(gp < b->pos) {
+				break;
 			}
+			if(_locate(gp, b, fn, lp)) {
+				return true;
+			}
+			shift -= b->size;
 		}
-		return std::pair<std::string, int>(info_ptr->name, rpos);
+		lp = shift;
+		fn = br->fullname;
+		return true;
 	}
 	
 public:
-	includer(const std::string &filename, const std::string &include_dir = "") {
-		incdir = include_dir;
-		load_file(filename);
-		//printf("%s", source.data());
-	}
-	~includer() = default;
-	
-	std::string get_source() const {
-		return source;
+	includer(const std::string &name, const std::list<std::string> &dirs) throw(std::exception)
+		: _name(name), _dirs(dirs), _trunk(0) {
+		_read(_name, &_trunk);
 	}
 	
-	std::string restore_location(const std::string &msg) const {
-		std::string result;
-		std::string string(msg);
-		// some of GLSL output formats
-		std::regex expr("(^|\n)[a-zA-Z:\\(\\) ]*(\\d+)[:\\(\\) ]+(\\d+)[:\\)]*"); 
-		std::smatch match;
-		
-		while(std::regex_search(string,match,expr))
-		{
-			std::pair<std::string, int> pair = get_location(std::stoi(std::string(match[3])));
-			result += match.prefix().str() + std::string(match[1]) + pair.first + ": " + std::string(match[2]) + ":" + std::to_string(pair.second);
-			string = match.suffix().str();
-		}
-		result += string;
-		
-		return result;
+	const std::string &data() const {
+		return _data;
+	}
+	
+	bool locate(int gpos, std::string &fullname, int &lpos) const {
+		return _locate(gpos, &_trunk, fullname, lpos);
 	}
 };
