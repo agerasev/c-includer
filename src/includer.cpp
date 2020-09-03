@@ -158,11 +158,50 @@ bool includer::_read(const std::string name, _branch *branch, int depth) {
     
     // read file line by line
     std::string line;
+    std::vector<int> gates;
+    bool gate_skip = false;
     while(std::getline(*file, line)) {
         std::string directive, value;
         bool skip = false;
         if (_directive(line, directive, value)) {
-            if(directive == "include") {
+            if (directive == "if" || directive == "ifdef" || directive == "ifndef" ||
+                directive == "else" || directive == "endif") {
+                if (directive == "endif") {
+                    assert(!gates.empty());
+                    if (gates.back() < 2) {
+                        skip = true;
+                    }
+                    gates.pop_back();
+                } else if (directive == "else") {
+                    assert(!gates.empty());
+                    if (gates.back() < 2) {
+                        gates.back() = !gates.back();
+                        skip = true;
+                    }
+                } else {
+                    int gate_type = 2;
+                    if (directive != "if") {
+                        auto it = _defs.find(value);
+                        if (it != _defs.end()) {
+                            if (directive == "ifdef") {
+                                gate_type = it->second;
+                            } else {
+                                gate_type = !it->second;
+                            }
+                        }
+                    }
+                    if (gate_type < 2) {
+                        skip = true;
+                    }
+                    gates.push_back(gate_type);
+                }
+                gate_skip = false;
+                for (int x : gates) {
+                    if (x < 2) {
+                        gate_skip = gate_skip || !x;
+                    }
+                }
+            } else if(directive == "include" && !gate_skip) {
                 if (value.size() > 2 && (
                     (value[0] == '"' && value[value.size() - 1] == '"') ||
                     (value[0] == '<' && value[value.size() - 1] == '>')
@@ -176,20 +215,21 @@ bool includer::_read(const std::string name, _branch *branch, int depth) {
                         branch->pop();
                     }
                 }
-            } else if(directive == "pragma") {
+            } else if(directive == "pragma" && !gate_skip) {
                 if(value == "once") {
                     skip = true;
                     _ignore.push_back(fullname);
                 }
             }
         }
-        if (!skip) {
+        if (!skip && !gate_skip) {
             _data += line;
         }
         _data += "\n";
         branch->size += 1;
         branch->lsize += 1;
     }
+    assert(gates.empty());
 
     return true;
 }
@@ -216,9 +256,10 @@ bool includer::_locate(int gp, const _branch *br, std::string &fn, int &lp) cons
 includer::includer(
     const std::string &name,
     const std::list<std::string> &dirs,
-    const std::map<std::string, std::string> &fmem
+    const std::map<std::string, std::string> &fmem,
+    const std::map<std::string, bool> &defs
 ):
-    _name(name), _dirs(dirs), _fmem(fmem), _trunk(0)
+    _name(name), _dirs(dirs), _fmem(fmem), _defs(defs), _trunk(0)
 {}
 
 bool includer::include() {

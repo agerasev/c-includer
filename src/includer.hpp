@@ -30,6 +30,7 @@ private:
 	std::string _name;
 	std::list<std::string> _dirs;
 	std::map<std::string, std::string> _fmem;
+	std::map<std::string, bool> _defs;
 	std::string _data;
 	
 	std::list<std::string> _ignore;
@@ -50,7 +51,8 @@ public:
 	includer(
 		const std::string &name,
 		const std::list<std::string> &dirs={},
-		const std::map<std::string, std::string> &fmem={}
+		const std::map<std::string, std::string> &fmem={},
+		const std::map<std::string, bool> &defs={}
 	);
 
 	bool include();

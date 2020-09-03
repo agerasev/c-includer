@@ -245,4 +245,118 @@ h02\n\
         }
         REQUIRE(!includer.locate(gpos, nullptr, nullptr));
     }
+
+        SECTION("Definitions") {
+        std::string source = "\
+1\n\
+#ifdef ABC\n\
+2\n\
+#ifdef XYZ\n\
+3\n\
+#ifndef DEF\n\
+4\n\
+#else // DEF\n\
+5\n\
+#endif // DEF\n\
+6\n\
+#else // XYZ\n\
+7\n\
+#endif // XYZ\n\
+8\n\
+#else // !ABC\n\
+9\n\
+#endif // ABC\n\
+A\n\
+#if defined(ABC)\n\
+B\n\
+#endif // ABC\n\
+C\n\
+";
+
+        std::string result = "\
+1\n\
+\n\
+2\n\
+#ifdef XYZ\n\
+3\n\
+\n\
+\n\
+\n\
+5\n\
+\n\
+6\n\
+#else // XYZ\n\
+7\n\
+#endif // XYZ\n\
+8\n\
+\n\
+\n\
+\n\
+A\n\
+#if defined(ABC)\n\
+B\n\
+#endif // ABC\n\
+C\n\
+";
+        includer includer(
+            "main.c",
+            std::list<std::string>{},
+            std::map<std::string, std::string>{
+                std::make_pair(std::string("main.c"), source)
+            },
+            std::map<std::string, bool>{
+                std::make_pair(std::string("ABC"), true),
+                std::make_pair(std::string("DEF"), true)
+            }
+        );
+
+        REQUIRE(includer.include());
+        REQUIRE(includer.data() == result);
+    }
+
+        SECTION("Define gate include") {
+        std::string source = "\
+#ifdef ABC\n\
+#include <h0.h>\n\
+#else // !ABC\n\
+#include <h1.h>\n\
+#endif // ABC\n\
+";
+        std::string h0 = "\
+H0 0\n\
+H0 1\n\
+H0 2\n\
+";
+        std::string h1 = "\
+H1 0\n\
+H1 1\n\
+H1 2\n\
+";
+
+        std::string result = "\
+\n\
+\n\
+\n\
+H1 0\n\
+H1 1\n\
+H1 2\n\
+\n\
+\n\
+";
+        includer includer(
+            "main.c",
+            std::list<std::string>{},
+            std::map<std::string, std::string>{
+                std::make_pair(std::string("main.c"), source),
+                std::make_pair(std::string("h0.h"), h0),
+                std::make_pair(std::string("h1.h"), h1)
+            },
+            std::map<std::string, bool>{
+                std::make_pair(std::string("ABC"), false)
+            }
+        );
+
+        REQUIRE(includer.include());
+        REQUIRE(includer.data() == result);
+    }
 };
