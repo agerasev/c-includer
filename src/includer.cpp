@@ -76,9 +76,52 @@ std::pair<std::unique_ptr<std::istream>, std::string> includer::_find(
         fullname = name;
         file = _open(fullname);
     }
-    assert(file && *file);
+    //assert(file && *file);
 
     return std::make_pair(std::move(file), std::move(fullname));
+}
+
+static bool _is_whitespace(char c) {
+    return c == ' ' || c == '\t';
+}
+static bool _is_symbol(char c) {
+    return !_is_whitespace(c);
+}
+static bool _is_letter(char c) {
+    return 
+        (c >= '0' && c <= '9') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= 'a' && c <= 'z') ||
+        (c == '_' || c == '$');
+}
+
+static bool _skip_whitespaces(const std::string &line, size_t &p) {
+    for (; p < line.size() && _is_whitespace(line[p]); ++p) {}
+    return p >= line.size();
+}
+static std::string _read_word(const std::string &line, size_t &p, bool(*check)(char)=_is_letter) {
+    std::string word; 
+    for (; p < line.size() && check(line[p]); ++p) {
+        word += line[p];
+    }
+    return word;
+}
+
+static bool _directive(const std::string &line, std::string &directive, std::string &value) {
+    directive.clear();
+    value.clear();
+    size_t p = 0;
+    if (_skip_whitespaces(line, p)) { return false; }
+    if (line[p] != '#') {
+        // not a directive
+        return false;
+    }
+    p += 1;
+    if (_skip_whitespaces(line, p)) { return true; }
+    directive = _read_word(line, p);
+    if (_skip_whitespaces(line, p)) { return true; }
+    value = _read_word(line, p, _is_symbol);
+    return true;
 }
 
 bool includer::_read(const std::string name, _branch *branch, int depth) {
@@ -115,22 +158,32 @@ bool includer::_read(const std::string name, _branch *branch, int depth) {
     
     // read file line by line
     std::string line;
-    std::smatch match;
-    std::regex include("^[ \t]*#include[ ]*[\"<]([^ ]*)[\">]"), pragma("^[  \t]*#pragma[ ]*([^ \t\n]*)");
     while(std::getline(*file, line)) {
-        if(std::regex_search(line, match, include)) {
-            _branch *b = branch->add(branch->pos + branch->size);
-            if (_read(std::string(match[1]), b, depth + 1)){
-                branch->size += b->size;
-            } else {
-                branch->pop();
+        std::string directive, value;
+        bool skip = false;
+        if (_directive(line, directive, value)) {
+            if(directive == "include") {
+                if (value.size() > 2 && (
+                    (value[0] == '"' && value[value.size() - 1] == '"') ||
+                    (value[0] == '<' && value[value.size() - 1] == '>')
+                )) {
+                    skip = true;
+                    std::string path = value.substr(1, value.size() - 2);
+                    _branch *b = branch->add(branch->pos + branch->size);
+                    if (_read(path, b, depth + 1)){
+                        branch->size += b->size;
+                    } else {
+                        branch->pop();
+                    }
+                }
+            } else if(directive == "pragma") {
+                if(value == "once") {
+                    skip = true;
+                    _ignore.push_back(fullname);
+                }
             }
-        } else if(std::regex_search(line, match, pragma)) {
-            std::string keyword(match[1]);
-            if(keyword == "once") {
-                _ignore.push_back(fullname);
-            }
-        } else {
+        }
+        if (!skip) {
             _data += line;
         }
         _data += "\n";
