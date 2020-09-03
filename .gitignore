@@ -1,5 +1,4 @@
-*.exe
-*.config
-*.files
-*.includes
-*.creator*
+/build
+
+/.vscode
+*.code-workspace
